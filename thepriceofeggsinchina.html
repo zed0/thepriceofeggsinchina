@@ -1,0 +1,334 @@
+<!doctype html>
+
+<html lang="en">
+	<head>
+		<!-- Required meta tags -->
+		<meta charset="utf-8">
+		<meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+		<meta name="description" content="The price of eggs in China">
+		<meta name="author" content="zed0">
+
+		<title>The price of eggs in China</title>
+
+		<link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.3.1/css/bootstrap.min.css" integrity="sha384-ggOyR0iXCbMQv3Xipma34MD+dH/1fQ784/j6cY/iJTQUOhcWr7x9JvoRxT2MZw1T" crossorigin="anonymous">
+		<link href="https://stackpath.bootstrapcdn.com/font-awesome/4.7.0/css/font-awesome.min.css" rel="stylesheet" integrity="sha384-wvfXpqpZZVQGK6TAh5PVlGOfQNHSoD2xbE+QkPxCAFlNEevoEH3Sl0sibVcOQVnN" crossorigin="anonymous">
+		<style type="text/css">
+		  .price-area {
+		    font-size: 15vh;
+		    line-height: 15vh;
+		    font-weight: bold;
+		    font-family: Arial, sans-serif;
+		  }
+		</style>
+	</head>
+
+	<body>
+		<div
+		  class="position-absolute"
+		  style="right: 0;"
+		>
+			<div class="btn-group">
+				<button type="button" class="btn" data-toggle="dropdown" aria-haspopup="true" aria-expanded="false">
+					<i class="fa fa-cog text-extra-muted"></i>
+				</button>
+				<div class="dropdown-menu dropdown-menu-right">
+					<div class="dropdown-header">
+						Currency
+					</div>
+					<button
+					  class="dropdown-item active"
+					  type="button"
+					  onclick="setCurrency('CNY');"
+					  id="CNY-menu-item"
+			    >
+						Chinese Yuan
+					</button>
+					<button
+					  class="dropdown-item"
+					  type="button"
+					  onclick="setCurrency('EUR');"
+					  id="EUR-menu-item"
+			    >
+						Euro
+					</button>
+					<button
+					  class="dropdown-item"
+					  type="button"
+					  onclick="setCurrency('GBP');"
+					  id="GBP-menu-item"
+			    >
+						Pound
+					</button>
+					<button
+					  class="dropdown-item"
+					  type="button"
+					  onclick="setCurrency('AUD');"
+					  id="AUD-menu-item"
+			    >
+						Australian Dollar
+					</button>
+					<button
+					  class="dropdown-item"
+					  type="button"
+					  onclick="setCurrency('USD');"
+					  id="USD-menu-item"
+			    >
+						US Dollar
+					</button>
+					<div class="dropdown-divider"></div>
+					<a class="dropdown-item" href="https://data.stats.gov.cn/english/easyquery.htm?cn=A01">
+						<i class="fa fa-fw fa-menu-item fa-bar-chart"></i>Data source
+					</a>
+					<a class="dropdown-item" href="https://github.com/zed0/thepriceofeggsinchina">
+						<i class="fa fa-fw fa-menu-item fa-github"></i>Contribute
+					</a>
+				</div>
+			</div>
+		</div>
+		<div
+		  class="price-area container d-flex align-items-center justify-content-center align-content-center flex-wrap"
+		  style="height: 100vh;"
+		>
+				<div id="answer">
+					<i class="text-muted fa fa-spinner fa-pulse fa-fw"></i>
+				</div>
+        <small id="units" class="text-muted ml-3"></small>
+		</div>
+		<div
+		  class="chart-container"
+		  style="position: absolute; height: 30vh; width: 100vw; bottom: 0;"
+		>
+		  <canvas
+		    id="chart"
+		    class="invisible"
+		  >
+		  </canvas>
+		</div>
+
+		<script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.4.1/jquery.min.js" integrity="sha256-CSXorXvZcTkaix6Yvo6HppcZGetbYMGWSFlBw8HfCJo=" crossorigin="anonymous"></script>
+		<script src="https://cdnjs.cloudflare.com/ajax/libs/popper.js/1.14.7/umd/popper.min.js" integrity="sha384-UO2eT0CpHqdSJQ6hJty5KVphtPhzWj9WO1clHTMGa3JDZwrnQq4sF86dIHNDz0W1" crossorigin="anonymous"></script>
+		<script src="https://stackpath.bootstrapcdn.com/bootstrap/4.3.1/js/bootstrap.min.js" integrity="sha384-JjSmVgyd0p3pXB1rRibZUAYoIIy6OrQ6VrjIEaFf/nJGzIxFDsf4x0xIM+B07jRM" crossorigin="anonymous"></script>
+		<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+		<script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.0.0"></script>
+		<script>
+      const currencies = {
+        USD: '$',
+        GBP: '£',
+        CNY: '¥',
+        AUD: '$',
+        EUR: '€',
+      };
+      const baseCurrency = 'CNY';
+      let currentCurrency = baseCurrency;
+      const today = new Date();
+      const startDate = subtractMonths(today, 13);
+      const pricePromise = getPrices();
+      const prices = pricePromise.then(({prices}) => prices);
+      const latestPrice = pricePromise.then(({latestPrice}) => latestPrice);
+      const latestDate = pricePromise.then(({latestDate}) => latestDate);
+      const conversionRates = getConversionRates();
+      const chart = createChart();
+
+      pricePromise.then(displayPrices);
+
+      async function setCurrency(newCurrency) {
+        currentCurrency = newCurrency;
+        Object
+        .keys(currencies)
+        .forEach(currency => {
+          if(currency === newCurrency)
+            document.getElementById(`${currency}-menu-item`).classList.add('active');
+          else
+            document.getElementById(`${currency}-menu-item`).classList.remove('active');
+        });
+        await displayPrices();
+      };
+
+      async function displayPrices() {
+        const convertedPrice = await convertPrice(await latestPrice, currentCurrency, await latestDate);
+		    document.getElementById('answer').innerHTML = `${convertedPrice}`;
+		    document.getElementById('units').innerHTML = `${currencies[currentCurrency]}/kg`;
+        updateChart();
+      };
+
+      async function convertPrice(price, currency, date) {
+        if(currency === baseCurrency)
+          return price.toFixed(2);
+
+        const conversionRate = await getConversionRateForDate(date, currency);
+        return (price * conversionRate).toFixed(2);
+      };
+
+		  async function getPrices() {
+		    // Refer to https://github.com/mbk-dev/nbsc/blob/master/README.md
+		    // and https://data.stats.gov.cn/english/easyquery.htm?cn=A01
+		    // for how to use this API
+		    return fetch(
+		      'https://cors-proxy.fringe.zone/https://data.stats.gov.cn/english/easyquery.htm?'
+		       + new URLSearchParams({
+		        m: 'QueryData',
+            dbcode: 'hgyd', // regional: fsnd / national: hgyd (monthly), hgnd (annual)
+            rowcode: 'zb', // regional: reg / national: zb
+            colcode: 'sj',
+            wds: '[]',
+            dfwds: '[{"wdcode":"zb","valuecode":"A010G03"}]',
+            k1: today.getTime(),
+		      }),
+		      {
+            method: 'GET',
+		      }
+		    )
+		    .then(response => response.json())
+		    .then(json => {
+		      const field = json
+		        .returndata
+		        .wdnodes
+		        .find(node => node.wdname === 'Indicators')
+		        .nodes
+		        .find(node => node.sortcode === 1382);
+
+		      const prices = json
+		        .returndata
+		        .datanodes
+		        .filter(node => node.wds.find(wd => wd.wdcode === 'zb' && wd.valuecode === field.code) && node.data.hasdata)
+		        .sort((a, b) => getDateFromPriceNode(a) - getDateFromPriceNode(b));
+
+          const latestPriceNode = prices[prices.length - 1];
+          return {
+            prices,
+            latestPrice: latestPriceNode.data.data,
+            latestDate: getDateFromPriceNode(latestPriceNode),
+          };
+		    });
+		  }
+
+      async function getConversionRates() {
+		    return fetch(
+		      `https://api.frankfurter.app/${ISODateFromDate(startDate)}..${ISODateFromDate(today)}?`
+		       + new URLSearchParams({
+		        from: 'CNY',
+		        to: Object.getOwnPropertyNames(currencies).join(','),
+		      }),
+		      {
+            method: 'GET',
+		      }
+		    )
+		    .then(response => response.json())
+		    .then(json => json.rates);
+      }
+
+      async function getConversionRateForDate(date, currency) {
+        const yearAndMonth = `${date.getFullYear()}-${String(date.getMonth()+1).padStart(2, '0')}`;
+        const conversionDate = Object.keys(await conversionRates)
+        .find(key => key.startsWith(yearAndMonth));
+        return (await conversionRates)[conversionDate][currency];
+      };
+
+      async function updateChart() {
+        chart.data.labels = [];
+        chart.data.datasets = [{data: []}];
+        for(const price of await prices) {
+          const date = getDateFromPriceNode(price);
+          const convertedPrice = await convertPrice(price.data.data, currentCurrency, date);
+          chart.data.labels.push(`${date.toLocaleString('default', {month: 'short'})} ${date.getFullYear()}`);
+          chart.data.datasets[0].data.push(convertedPrice);
+        }
+        chart.update('none');
+        document.getElementById('chart').classList.remove('invisible');
+      }
+
+      function createChart() {
+        const width = Math.max(document.documentElement.clientWidth, window.innerWidth || 0);
+        const isSmallView = width <= 800;
+
+        Chart.register(ChartDataLabels);
+        return new Chart(document.getElementById('chart'), {
+          type: 'bar',
+          data: {
+            labels: [],
+            datasets: [],
+          },
+          options: {
+            maintainAspectRatio: false,
+            layout: {
+              padding: {
+                top: 50,
+              },
+            },
+            elements: {
+              bar: {
+                backgroundColor: '#6c757d',
+              },
+            },
+            plugins: {
+              legend: {
+                display: false,
+              },
+              datalabels: {
+                clamp: true,
+                anchor: 'start',
+                align: 'end',
+                formatter: function(value, context) {
+                  return `${value} ${currencies[currentCurrency]}/kg\n${context.chart.data.labels[context.dataIndex]}`;
+                },
+                textAlign: 'center',
+                color: '#ffffff',
+                font: {
+                  family: '"Arial", sans-serif',
+                  size: 12,
+                  weight: isSmallView ? 'normal' : 'bold',
+                },
+                rotation: isSmallView ? 90 : 0,
+              },
+              tooltip: {
+                displayColors: false,
+                xAlign: 'center',
+                yAlign: 'bottom',
+                callbacks: {
+                  label: function(context) {
+                    return `${context.parsed.y} ${currencies[currentCurrency]}/kg`;
+                  }
+                },
+              },
+            },
+            borderSkipped: true,
+            // barPercentage: 1,
+            categoryPercentage: 1,
+            scales: {
+              y: {
+                display: false,
+                beginAtZero: true,
+                grid: {
+                  display: false,
+                },
+              },
+              x: {
+                display: false,
+                grid: {
+                  display: false,
+                },
+              },
+            },
+          },
+        });
+      }
+
+		  function getDateFromPriceNode(priceNode) {
+		    const code = priceNode.wds.find(wd => wd.wdcode === 'sj').valuecode;
+		    const year = code.slice(0, 4);
+		    const month = code.slice(4);
+		    return new Date(year, month - 1);
+		  }
+
+		  function subtractMonths(date, months) {
+		    const result = new Date(date);
+        result.setMonth(result.getMonth() - months);
+        return result;
+		  }
+
+		  function ISODateFromDate(date) {
+		    return date.toISOString().split('T')[0];
+		  }
+		</script>
+	</body>
+</html>
